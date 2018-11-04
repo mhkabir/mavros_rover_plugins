@@ -1,0 +1,18 @@
+<launch>
+  <arg name="max_speed" default="1.0"/>
+  <arg name="max_angle" default="1.0"/>
+
+  <!-- Launch Mavros -->
+  <include file="$(find mavros)/launch/px4.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)" />
+     <arg name="gcs_url" value="$(arg gcs_url)" />
+  </include>
+
+  <node name="joy" type="joy_node" pkg="joy">
+  	<param name="autorepeat_rate" value="20.0" />
+  </node>
+
+  <node name="joy_ackermann_teleop" type="joyop.py" pkg="mavros_rover_plugins" output='screen' args="$(arg max_speed) $(arg max_angle)"/>
+
+</launch>
+

@@ -1,0 +1,5 @@
+<library path="lib/libmavros_rover_plugins">
+	<class name="ackermann_interface" type="mavros::rover_plugins::AckermannInterfacePlugin" base_class_type="mavros::plugin::PluginBase">
+		<description>Send vehicle control commands to FCU.</description>
+	</class>
+</library>
