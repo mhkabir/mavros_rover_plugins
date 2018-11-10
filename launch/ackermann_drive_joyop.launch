@@ -4,12 +4,12 @@
 
   <!-- Launch Mavros -->
   <include file="$(find mavros)/launch/px4.launch">
-    <arg name="fcu_url" value="$(arg fcu_url)" />
-     <arg name="gcs_url" value="$(arg gcs_url)" />
+    <arg name="fcu_url" value="/dev/ttyACM0:921600" />
+     <arg name="gcs_url" value="" />
   </include>
 
   <node name="joy" type="joy_node" pkg="joy">
-  	<param name="autorepeat_rate" value="20.0" />
+	<param name="autorepeat_rate" value="50.0" />
   </node>
 
   <node name="joy_ackermann_teleop" type="joyop.py" pkg="mavros_rover_plugins" output='screen' args="$(arg max_speed) $(arg max_angle)"/>
