@@ -48,7 +48,8 @@ public:
 	{
 		PluginBase::initialize(uas_);
 
-		target_sub_ = ai_nh.subscribe("/ackermann_cmd", 10, &AckermannInterfacePlugin::ackermann_drive_cb, this);
+		manual_sp_sub_ = ai_nh.subscribe("/ecu_interface/control/ackermann_cmd_manual", 10, &AckermannInterfacePlugin::manual_sp_cb, this);
+		auto_sp_sub_ = ai_nh.subscribe("/ecu_interface/control/ackermann_cmd_auto", 10, &AckermannInterfacePlugin::auto_sp_cb, this);
 
 	}
 
@@ -60,10 +61,16 @@ public:
 private:
 	ros::NodeHandle ai_nh;
 
-	ros::Subscriber target_sub_;
+	ros::Subscriber manual_sp_sub_;
+	ros::Subscriber auto_sp_sub_;
 
-	void ackermann_drive_cb(const ackermann_msgs::AckermannDriveStamped::ConstPtr &msg)
+	double last_manual_timestamp_;
+	bool autonomous_control_;
+
+	void manual_sp_cb(const ackermann_msgs::AckermannDriveStamped::ConstPtr &msg)
 	{
+		
+		last_manual_timestamp_ = msg->header.stamp.toSec();
 
 		mavlink::common::msg::SET_POSITION_TARGET_LOCAL_NED setpoint{};
 
@@ -80,6 +87,44 @@ private:
 		UAS_FCU(m_uas)->send_message_ignore_drop(setpoint);
 
 	}
+
+	void auto_sp_cb(const ackermann_msgs::AckermannDriveStamped::ConstPtr &msg)
+	{
+		
+		if(ros::Time::now().toSec() - last_manual_timestamp_ < 0.001) {
+			if(autonomous_control_) {
+				ROS_INFO("Switching to manual control");
+				autonomous_control_ = false;
+			}
+			return;
+		} else {
+			if(!autonomous_control_) {
+				ROS_INFO("Switching to autonomous control");
+				autonomous_control_ = true;
+			}
+		}
+
+		mavlink::common::msg::SET_POSITION_TARGET_LOCAL_NED setpoint{};
+
+		setpoint.time_boot_ms = msg->header.stamp.toNSec() / 1000000;
+
+		setpoint.target_system = m_uas->get_tgt_system();
+		setpoint.target_component = m_uas->get_tgt_component();
+
+		// Magic key to enable autonomous control
+		setpoint.type_mask = 45915;
+
+		setpoint.vx = msg->drive.speed;
+		setpoint.afx = msg->drive.acceleration;
+		setpoint.yaw = msg->drive.steering_angle;
+		setpoint.yaw_rate = msg->drive.steering_angle_velocity;
+
+		UAS_FCU(m_uas)->send_message_ignore_drop(setpoint);
+
+	}
+
+
+
 };
 }	// namespace rover_plugins
 }	// namespace mavros
