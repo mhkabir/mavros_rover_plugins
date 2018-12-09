@@ -16,77 +16,88 @@ class AckermannDriveJoyop:
 
     def __init__(self, args):
         if len(args) == 1 or len(args) == 2:
-            self.max_speed = float(args[0])
-            self.max_steering_angle = float(args[len(args)-1])
-            cmd_topic = 'ackermann_cmd'
-        elif len(args) == 3:
-            self.max_speed = float(args[0])
-            self.max_steering_angle = float(args[1])
-            cmd_topic = '/' + args[2]
+            self.max_acceleration = float(args[0])
+            self.max_steering_angle = float(args[len(args) - 1])
         else:
-            self.max_speed = 1.0
-            self.max_steering_angle = 1.0
-            cmd_topic = 'ackermann_cmd'
+            self.max_acceleration = 1.0     # m/s^2
+            self.max_steering_angle = 0.5   # rad
 
-        self.speed = 0.0
+        self.acceleration = 0.0
         self.steering_angle = 0.0
         self.joy_sub = rospy.Subscriber('/joy', Joy, self.joy_callback)
-        self.drive_pub = rospy.Publisher(cmd_topic, AckermannDriveStamped,
+        self.manual_pub = rospy.Publisher('/ecu_interface/control/ackermann_cmd_manual', AckermannDriveStamped,
                                          queue_size=1)
-	self.armed = False
-	self.forward_active = False
-	self.reverse_active = False
+        self.auto_pub = rospy.Publisher('/ecu_interface/control/ackermann_cmd_auto', AckermannDriveStamped,
+                                         queue_size=1)
+        # If true, send acceleration/velocity setpoints from joystick when autonomous control button is pressed,
+        # instead of direct normalized torque commands.
+        # If false, joystick setpoints are stopped completely when autonomous
+        # control button is pressed.
+        self.manual_metric_control = True
+        self.armed = False
+        self.forward_active = False
+        self.reverse_active = False
 
     def joy_callback(self, joy_msg):
-		self.forward_active = joy_msg.axes[4] < 0.99
-		self.reverse_active = joy_msg.axes[5] < 0.99
-		if(joy_msg.axes[4] < -0.5 and joy_msg.axes[5] < -0.5):
-			self.armed = True
-	        self.print_state()
-		if not self.armed:
-			return
-		if (self.forward_active and self.reverse_active):
-			# Brake
-			self.speed = 0.0
-		elif (self.reverse_active):
-			# Reverse
-			self.speed = -(joy_msg.axes[5] - 1.0)/2.0 * self.max_speed
-		elif (self.forward_active):
-			# Forward
-			self.speed = (joy_msg.axes[4] - 1.0)/2.0 * self.max_speed
-		else:
-			# Coast
-			self.speed = float('nan')  # TODO : use nan
+        self.forward_active = joy_msg.axes[4] < 0.99
+        self.reverse_active = joy_msg.axes[5] < 0.99
+        if(joy_msg.axes[4] < -0.5 and joy_msg.axes[5] < -0.5):
+            self.armed = True
+            self.print_state()
 
-		# Steering
-		if abs(joy_msg.axes[0]) > 0.1:
-	        	self.steering_angle = - joy_msg.axes[0] * self.max_steering_angle
-		else:
-			self.steering_angle = 0.0
+        if not self.armed:
+            return
+        if (self.forward_active and self.reverse_active):
+            # Brake
+            self.acceleration = 0.0
+        elif (self.reverse_active):
+            # Reverse
+            self.acceleration = (joy_msg.axes[5] - 1.0) / 2.0
+        elif (self.forward_active):
+            # Forward
+            self.acceleration = -(joy_msg.axes[4] - 1.0) / 2.0
+        else:
+            # Coast
+            self.acceleration = float('nan')
 
-		# Publish control commands
-		ackermann_cmd_msg = AckermannDriveStamped()
-		ackermann_cmd_msg.drive.speed = self.speed
-		ackermann_cmd_msg.drive.steering_angle = self.steering_angle
-		self.drive_pub.publish(ackermann_cmd_msg)
+        # Steering
+        if abs(joy_msg.axes[0]) > 0.1:
+                self.steering_angle = - joy_msg.axes[0]
+        else:
+            self.steering_angle = 0.0
+
+        self.print_state()
+
+        ackermann_cmd_msg = AckermannDriveStamped()
+        ackermann_cmd_msg.header.stamp = rospy.Time.now()
+        if joy_msg.buttons[0] == 0:
+            # Publish normalized manual setpoints if autonomous control button isn't held down
+            ackermann_cmd_msg.drive.acceleration = self.acceleration
+            ackermann_cmd_msg.drive.steering_angle = self.steering_angle
+            self.manual_pub.publish(ackermann_cmd_msg)
+        elif self.manual_metric_control:
+            # Publish metric manual setpoints if enabled
+            ackermann_cmd_msg.drive.acceleration = self.acceleration * self.max_acceleration
+            ackermann_cmd_msg.drive.steering_angle = self.steering_angle * self.max_steering_angle
+            self.auto_pub.publish(ackermann_cmd_msg)
+
 
     def print_state(self):
         sys.stderr.write('\x1b[2J\x1b[H')
         rospy.loginfo('\x1b[1M\r'
                       '\033[34;1mArmed: \033[32;1m%s, '
-                      '\033[34;1mSpeed: \033[32;1m%0.2f m/s, '
+                      '\033[34;1mAcceleration: \033[32;1m%0.2f m/s, '
                       '\033[34;1mSteering Angle: \033[32;1m%0.2f rad\033[0m',
-                      self.armed, self.speed if not math.isnan(self.speed) else 0.0, self.steering_angle)
+                      self.armed, self.acceleration if not math.isnan(self.acceleration) else 0.0, self.steering_angle)
 
     def finalize(self):
-        rospy.loginfo('Halting motors, aligning wheels and exiting...')
         ackermann_cmd_msg = AckermannDriveStamped()
-        ackermann_cmd_msg.drive.speed = 0
+        ackermann_cmd_msg.drive.acceleration = 0
         ackermann_cmd_msg.drive.steering_angle = 0
-        self.drive_pub.publish(ackermann_cmd_msg)
+        self.manual_pub.publish(ackermann_cmd_msg)
         sys.exit()
 
 if __name__ == '__main__':
     rospy.init_node('ackermann_drive_joyop_node')
     joyop = AckermannDriveJoyop(sys.argv[1:len(sys.argv)])
-    rospy.spin()
+rospy.spin()
