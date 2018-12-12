@@ -70,6 +70,8 @@ class AckermannDriveJoyop:
 
         ackermann_cmd_msg = AckermannDriveStamped()
         ackermann_cmd_msg.header.stamp = rospy.Time.now()
+        ackermann_cmd_msg.drive.speed = float('nan')
+        ackermann_cmd_msg.drive.jerk = float('nan')
         if joy_msg.buttons[0] == 0:
             # Publish normalized manual setpoints if autonomous control button isn't held down
             ackermann_cmd_msg.drive.acceleration = self.acceleration
