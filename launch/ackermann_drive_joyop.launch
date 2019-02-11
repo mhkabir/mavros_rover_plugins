@@ -4,8 +4,8 @@
 
   <!-- Launch Mavros -->
   <include file="$(find mavros)/launch/px4.launch">
-    <arg name="fcu_url" value="/dev/ttyACM0:921600" />
-     <arg name="gcs_url" value="udp-b://@" />
+	<arg name="fcu_url" value="/dev/ttyACM0:921600" />
+	<arg name="gcs_url" value="udp-b://@" />
   </include>
 
   <node name="joy" type="joy_node" pkg="joy">
