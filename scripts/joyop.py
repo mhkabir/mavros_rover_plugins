@@ -33,7 +33,7 @@ class AckermannDriveJoyop:
         # instead of direct normalized torque commands.
         # If false, joystick setpoints are stopped completely when autonomous
         # control button is pressed.
-        self.manual_metric_control = True
+        self.manual_metric_control = False
         self.armed = False
         self.forward_active = False
         self.reverse_active = False
